@@ -127,16 +127,19 @@ def _compute_aggregate_scores(
         # reported for each task.
         # These two tasks report pearsonr for dev and spearman for test. Not sure why?
         if task == "SICKRelatedness" or task == "STSBenchmark":
+            print("Task is :", task, "dev score is ", scores["devpearson"]*100, "test score is ", scores["spearman"]*100)
             aggregate_scores[task_set]["dev"] += scores["devpearson"] * 100
             aggregate_scores[task_set]["test"] += scores["spearman"] * 100
         # There are no partitions for these tasks as no model is trained on top of the embeddings,
         # therefore we count their scores in both the dev and test accumulators.
         elif task.startswith("STS"):
             sts_score = scores["all"]["spearman"]["mean"] * 100
+            print("Task is :", task, "dev score is ", sts_score, "test score is ", sts_score)
             aggregate_scores[task_set]["dev"] += sts_score
             aggregate_scores[task_set]["test"] += sts_score
         elif task == "ImageCaptionRetrieval":
             # HACK (John): The divisor here is missing from SentEval, so add it manually ourselves.
+            print("Task is :", task, "dev score is ", scores["devacc"] /6, "test score is ", mean(scores["acc"][0][:-1] + scores["acc"][-1][:-1]))
             aggregate_scores[task_set]["dev"] += scores["devacc"] / 6
             # Produce an average the same way SentEval produces its devacc average:
             # https://tinyurl.com/y9wcxjtr
@@ -148,8 +151,10 @@ def _compute_aggregate_scores(
             aggregate_scores[task_set]["dev"] += scores["devacc"]
             # f1 is in the score, average it with acc before accumulating
             if "f1" in scores:
+                print("Task is :", task, "dev score is ", scores["devacc"], "test score is ", mean([scores["acc"], scores["f1"]]))
                 aggregate_scores[task_set]["test"] += mean([scores["acc"], scores["f1"]])
             else:
+                print("Task is :", task, "dev score is ", scores["devacc"], "test score is ", scores["acc"])
                 aggregate_scores[task_set]["test"] += scores["acc"]
         else:
             raise ValueError(f'Found an unexpected field in results, "{task}".')
@@ -233,6 +238,9 @@ def _run_senteval(
     )
 
     se = senteval.engine.SE(params, batcher, prepare)
+    typer.secho(
+        f"{RUNNING} Evaluate start!", fg=typer.colors.WHITE, bold=True
+    )
     results = se.eval(TRANSFER_TASKS)
     typer.secho(f"{SUCCESS} Evaluation complete!", fg=typer.colors.GREEN, bold=True)
 
@@ -662,8 +670,10 @@ def allennlp(
 ) -> None:
     """Evaluates a trained AllenNLP model against the SentEval benchmark."""
 
-    from allennlp.models.archival import load_archive
-    from allennlp.predictors import Predictor
+    # from allennlp.models.archival import load_archive
+    from archival.archival import load_archive
+    from predictor.predictor import Predictor
+    # from allennlp.predictors import Predictor
 
     # SentEval prepare and batcher
     def prepare(params, samples):
@@ -675,6 +685,7 @@ def allennlp(
         # Re-tokenize the input text using the tokenizer of the dataset reader
         inputs = [{"text": " ".join(tokens)} for tokens in batch]
         outputs = params.predictor.predict_batch_json(inputs)
+        print("output is ", outputs)
         # AllenNLP models return a dictionary, so access the embeddings with the given key.
         embeddings = [output[output_dict_field] for output in outputs]
 
@@ -684,7 +695,9 @@ def allennlp(
     # Allows us to import custom dataset readers and models that may exist in the AllenNLP archive.
     # See: https://tinyurl.com/whkmoqh
     include_package = include_package or []
+    print("include package ", include_package)
     for package_name in include_package:
+        print("package name is ", package_name)
         common_util.import_module_and_submodules(package_name)
 
     # Load the archived Model

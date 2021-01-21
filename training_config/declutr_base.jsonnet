@@ -3,7 +3,7 @@
 local transformer_model = "roberta-base";
 
 // This will be used to set the max/min # of tokens in the positive and negative examples.
-local max_length = 512;
+local max_length = 256;
 local min_length = 32;
 
 {
@@ -55,6 +55,7 @@ local min_length = 32;
     },
     "trainer": {
         // Set use_amp to true to use automatic mixed-precision during training (if your GPU supports it)
+        "cuda_device" : 4,
         "use_amp": true,
         "optimizer": {
             "type": "huggingface_adamw",

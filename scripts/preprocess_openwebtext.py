@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+#-*- coding: utf-8 -*-
 import shutil
 import tarfile
 from pathlib import Path
 from typing import List, Optional
+import requests
+import io
+import re
 
 import typer
 
@@ -44,8 +48,9 @@ def _write_output_to_disk(text: List[str], output_filepath: str) -> None:
     )
 
 
+    # openwebtext_path: str,
 def main(
-    openwebtext_path: str,
+    # openwebtext_path: str,
     output_filepath: str,
     min_length: Optional[int] = None,
     lowercase: bool = True,
@@ -59,7 +64,10 @@ def main(
     using the HuggingFace Transformers library. Otherwise `str.split()` is used. This argument has
     no effect if `min-length is None`.
     """
+    print("path direct")
+    openwebtext_path = "openwebtext 2"
     openwebtext_path = Path(openwebtext_path)
+    # openwebtext_path = 'https://drive.google.com/file/d/1EA5V0oetDCOke7afsktL_JDQ-ETtNOvx/view?usp=sharing'
 
     # Setup the pre-trained tokenizer, if specified
     if min_length is not None:
@@ -84,6 +92,38 @@ def main(
         ),
         bold=True,
     )
+
+    # r = requests.get(openwebtext_path, stream=True)
+    # z = tarfile.TarFile(io.BytesIO(r.content))
+    # partition_filenames = z.namelist()[1:]
+    # typer.secho(f"{DOWNLOAD} Downloaded Openwebtext", bold=True)
+    
+    # preprocessed_documents = []
+    # for filename in partition_filenames:
+    #     text = z.open(filename).read().decode("utf-8")
+
+    #     # Strip out subtitles and split the text into documents
+    #     no_subtitles = re.sub(r"(=\s){2,5}.*(=\s){2,5}", "", text)
+    #     documents = re.split(r"=\s.*\s=", no_subtitles)
+
+    #     with typer.progressbar(
+    #         documents, label=typer.style("Preprocessing text", bold=True)
+    #     ) as progress:
+    #         for doc in progress:
+    #             doc = _sanitize(doc, lowercase=lowercase)
+    #             if not doc:
+    #                 continue
+
+    #             # Retain documents if the length of their shortest document is
+    #             # equal to or greater than the minimum specified length
+    #             if tokenizer is not None:
+    #                 num_tokens = len(tokenizer(doc))
+    #                 if num_tokens < min_length:
+    #                     continue
+
+    #             preprocessed_documents.append(doc)
+
+    # _write_output_to_disk(preprocessed_documents, output_filepath)
 
     with typer.progressbar(
         length=max_documents or len(list(openwebtext_path.iterdir())), label="Preprocessing text"

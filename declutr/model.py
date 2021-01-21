@@ -2,7 +2,8 @@ from typing import Dict, Optional
 
 import torch
 from allennlp.data import TextFieldTensors, Vocabulary
-from allennlp.models.model import Model
+# from allennlp.models.model import Model
+from load_model.model import Model, _DEFAULT_WEIGHTS
 from allennlp.modules import FeedForward, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.modules.seq2vec_encoders import BagOfEmbeddingsEncoder
 from allennlp.nn import InitializerApplicator
