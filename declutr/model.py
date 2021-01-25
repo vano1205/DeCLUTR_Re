@@ -192,7 +192,7 @@ class DeCLUTR(Model):
             if output_dict is not None and not self.training:
                 output_dict["projections"] = embedded_text.clone().detach()
 
-        if augment is not False:
+        # if augment is not False:
         # if self._glue is not False:
         #     embedded_text = FeedForward(input_dim=768, num_layers=1, hidden_dims=[self.label_length], )
 
