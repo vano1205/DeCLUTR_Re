@@ -57,6 +57,7 @@ class DeCLUTR(Model):
         text_field_embedder: TextFieldEmbedder,
         seq2vec_encoder: Optional[Seq2VecEncoder] = None,
         feedforward: Optional[FeedForward] = None,
+        downstream_glue: bool = False,
         miner: Optional[PyTorchMetricLearningMiner] = None,
         loss: Optional[PyTorchMetricLearningLoss] = None,
         initializer: InitializerApplicator = InitializerApplicator(),
@@ -77,6 +78,8 @@ class DeCLUTR(Model):
             text_field_embedder.get_output_dim(), averaged=True
         )
         self._feedforward = feedforward
+
+        self._glue = downstream_glue
 
         self._miner = miner
         self._loss = loss
@@ -151,6 +154,7 @@ class DeCLUTR(Model):
                 )
                 # Get embeddings into the format that the PyTorch Metric Learning library expects
                 # before computing the loss (with an optional mining step).
+                # embedded_positives = self._forward_internal(anchors,augment=True)
                 embeddings, labels = self._loss.get_embeddings_and_labels(
                     embedded_anchors, embedded_positives
                 )
@@ -166,6 +170,7 @@ class DeCLUTR(Model):
         self,
         tokens: TextFieldTensors,
         output_dict: Optional[Dict[str, torch.Tensor]] = None,
+        # augment: bool = False,
     ) -> torch.Tensor:
 
         masked_lm_loss, embedded_text = self._text_field_embedder(tokens)
@@ -186,6 +191,10 @@ class DeCLUTR(Model):
             embedded_text = self._feedforward(embedded_text)
             if output_dict is not None and not self.training:
                 output_dict["projections"] = embedded_text.clone().detach()
+
+        if augment is not False:
+        # if self._glue is not False:
+        #     embedded_text = FeedForward(input_dim=768, num_layers=1, hidden_dims=[self.label_length], )
 
         return masked_lm_loss, embedded_text
 

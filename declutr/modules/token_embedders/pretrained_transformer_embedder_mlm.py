@@ -80,6 +80,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
             # 1) `output_hidden_states` must be True to get access to token embeddings.
             # 2) We need to use `AutoModelForMaskedLM` to get the correct model
             self.transformer_model = AutoModelForMaskedLM.from_pretrained(
+            # self.transformer_model = RobertaForAugment.from_pretrained()
                 model_name, config=self.config, **(transformer_kwargs or {})
             )
         # Eveything after the if statement (including the else) is copied directly from:
