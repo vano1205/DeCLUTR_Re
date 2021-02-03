@@ -296,6 +296,9 @@ class Model(torch.nn.Module, Registrable):
 
         model_params = config.get("model")
 
+        print("model params", model_params)
+        augment = model_params['augment']
+
         # The experiment config tells us how to _train_ a model, including where to get pre-trained
         # embeddings/weights from. We're now _loading_ the model, so those weights will already be
         # stored in our model. We don't need any pretrained weight file or initializers anymore,

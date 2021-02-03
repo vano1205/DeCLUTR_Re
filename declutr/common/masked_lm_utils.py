@@ -5,6 +5,10 @@ from transformers import PreTrainedTokenizer
 
 from allennlp.data import TextFieldTensors
 
+import logging
+
+logging.basicConfig(level=logging.ERROR)
+
 
 def _mask_tokens(
     inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, mlm_probability: float = 0.15

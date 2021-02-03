@@ -55,6 +55,7 @@ PROBING_TASKS = [
     "CoordinationInversion",
 ]
 TRANSFER_TASKS = DOWNSTREAM_TASKS + PROBING_TASKS
+# TRANSFER_TASKS =  ["CR"]
 
 # Emoji's used in typer.secho calls
 # See: https://github.com/carpedm20/emoji/blob/master/emoji/unicode_codes.py
@@ -72,7 +73,7 @@ def _cleanup_batch(batch: List[Iterable[Union[str, bytes]]]) -> List[Iterable[st
             token.decode("utf-8", errors="ignore") if isinstance(token, bytes) else token
             for token in sent
         ]
-        if sent
+        if sent 
         else ["."]
         for sent in batch
     ]
@@ -685,7 +686,6 @@ def allennlp(
         # Re-tokenize the input text using the tokenizer of the dataset reader
         inputs = [{"text": " ".join(tokens)} for tokens in batch]
         outputs = params.predictor.predict_batch_json(inputs)
-        print("output is ", outputs)
         # AllenNLP models return a dictionary, so access the embeddings with the given key.
         embeddings = [output[output_dict_field] for output in outputs]
 
@@ -717,6 +717,7 @@ def allennlp(
     # Performs a few setup steps and returns the SentEval params
     params_senteval = _setup_senteval(path_to_senteval, prototyping_config, verbose)
     params_senteval["predictor"] = predictor
+    print("params_senteval", params_senteval)
     _run_senteval(params_senteval, path_to_senteval, batcher, prepare, output_filepath)
 
     return

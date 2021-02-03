@@ -1,8 +1,10 @@
 from typing import Dict, Optional
 
 import torch
+import numpy as np
 from allennlp.data import TextFieldTensors, Vocabulary
 # from allennlp.models.model import Model
+from typing import List
 from load_model.model import Model, _DEFAULT_WEIGHTS
 from allennlp.modules import FeedForward, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.modules.seq2vec_encoders import BagOfEmbeddingsEncoder
@@ -13,7 +15,8 @@ from declutr.common.masked_lm_utils import mask_tokens
 from declutr.common.model_utils import all_gather_anchor_positive_pairs, unpack_batch
 from declutr.losses import PyTorchMetricLearningLoss
 from declutr.miners import PyTorchMetricLearningMiner
-
+import logging
+logging.basicConfig(level=logging.ERROR)
 
 @Model.register("declutr")
 class DeCLUTR(Model):
@@ -55,9 +58,9 @@ class DeCLUTR(Model):
         self,
         vocab: Vocabulary,
         text_field_embedder: TextFieldEmbedder,
+        augment: List[int], 
         seq2vec_encoder: Optional[Seq2VecEncoder] = None,
         feedforward: Optional[FeedForward] = None,
-        downstream_glue: bool = False,
         miner: Optional[PyTorchMetricLearningMiner] = None,
         loss: Optional[PyTorchMetricLearningLoss] = None,
         initializer: InitializerApplicator = InitializerApplicator(),
@@ -79,7 +82,7 @@ class DeCLUTR(Model):
         )
         self._feedforward = feedforward
 
-        self._glue = downstream_glue
+        self.augment = augment
 
         self._miner = miner
         self._loss = loss
@@ -119,42 +122,45 @@ class DeCLUTR(Model):
             A scalar loss to be optimized.
         """
         output_dict: Dict[str, torch.Tensor] = {}
-
         # If multiple anchors were sampled, we need to unpack them.
         anchors = unpack_batch(anchors)
         # Mask anchor input ids and get labels required for MLM.
         if self.training and self._masked_language_modeling:
             anchors = mask_tokens(anchors, self._tokenizer)
         # This is the textual representation learned by a model and used for downstream tasks.
-        masked_lm_loss, embedded_anchors = self._forward_internal(anchors, output_dict)
+        masked_lm_loss, embedded_anchors = self._forward_internal(anchors, -1, output_dict)
 
         # If positives are supplied by DataLoader and we are training, compute a contrastive loss.
         if self.training:
             output_dict["loss"] = 0
             # TODO: We should throw a ValueError if no postives provided by loss is not None.
             if self._loss is not None:
-                # Like the anchors, if we sampled multiple positives, we need to unpack them.
-                positives = unpack_batch(positives)
-                # Positives are represented by their mean embedding a la
-                # https://arxiv.org/abs/1902.09229.
-                _, embedded_positives = self._forward_internal(positives)
-                embedded_positive_chunks = []
-                for i, chunk in enumerate(
-                    torch.chunk(embedded_positives, chunks=embedded_anchors.size(0), dim=0)
-                ):
-                    embedded_positive_chunks.append(torch.mean(chunk, dim=0))
-                embedded_positives = torch.stack(embedded_positive_chunks)
-                # If we are training on multiple GPUs using DistributedDataParallel, then a naive
-                # application would result in 2 * (batch_size/n_gpus - 1) number of negatives per
-                # GPU. To avoid this, we need to gather the anchors/positives from each replica on
-                # every other replica in order to generate the correct number of negatives,
-                # i.e. 2 * (batch_size - 1), before computing the contrastive loss.
-                embedded_anchors, embedded_positives = all_gather_anchor_positive_pairs(
-                    embedded_anchors, embedded_positives
-                )
-                # Get embeddings into the format that the PyTorch Metric Learning library expects
-                # before computing the loss (with an optional mining step).
-                # embedded_positives = self._forward_internal(anchors,augment=True)
+                if len(self.augment) == 0: 
+                    # Like the anchors, if we sampled multiple positives, we need to unpack them.
+                    positives = unpack_batch(positives)
+                    # Positives are represented by their mean embedding a la
+                    # https://arxiv.org/abs/1902.09229.
+                    _, embedded_positives = self._forward_internal(positives, -1)
+                    embedded_positive_chunks = []
+                    for i, chunk in enumerate(
+                        torch.chunk(embedded_positives, chunks=embedded_anchors.size(0), dim=0)
+                    ):
+                        embedded_positive_chunks.append(torch.mean(chunk, dim=0))
+                    embedded_positives = torch.stack(embedded_positive_chunks)
+                    # If we are training on multiple GPUs using DistributedDataParallel, then a naive
+                    # application would result in 2 * (batch_size/n_gpus - 1) number of negatives per
+                    # GPU. To avoid this, we need to gather the anchors/positives from each replica on
+                    # every other replica in order to generate the correct number of negatives,
+                    # i.e. 2 * (batch_size - 1), before computing the contrastive loss.
+                    embedded_anchors, embedded_positives = all_gather_anchor_positive_pairs(
+                        embedded_anchors, embedded_positives
+                    )
+                    # Get embeddings into the format that the PyTorch Metric Learning library expects
+                    # before computing the loss (with an optional mining step).
+                else: 
+                    augment = np.random.choice(self.augment,1)[0]
+                    # print("augment value is ~~~~~~~~~~~~~~~~~~~~", augment)
+                    _, embedded_positives = self._forward_internal(anchors, augment)
                 embeddings, labels = self._loss.get_embeddings_and_labels(
                     embedded_anchors, embedded_positives
                 )
@@ -169,11 +175,10 @@ class DeCLUTR(Model):
     def _forward_internal(
         self,
         tokens: TextFieldTensors,
+        augment : int,
         output_dict: Optional[Dict[str, torch.Tensor]] = None,
-        # augment: bool = False,
     ) -> torch.Tensor:
-
-        masked_lm_loss, embedded_text = self._text_field_embedder(tokens)
+        masked_lm_loss, embedded_text = self._text_field_embedder(tokens, augment)
         mask = get_text_field_mask(tokens).float()
 
         embedded_text = self._seq2vec_encoder(embedded_text, mask=mask)
@@ -191,10 +196,6 @@ class DeCLUTR(Model):
             embedded_text = self._feedforward(embedded_text)
             if output_dict is not None and not self.training:
                 output_dict["projections"] = embedded_text.clone().detach()
-
-        # if augment is not False:
-        # if self._glue is not False:
-        #     embedded_text = FeedForward(input_dim=768, num_layers=1, hidden_dims=[self.label_length], )
 
         return masked_lm_loss, embedded_text
 

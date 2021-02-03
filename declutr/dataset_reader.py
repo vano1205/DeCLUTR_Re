@@ -15,7 +15,8 @@ from declutr.common.contrastive_utils import sample_anchor_positive_pairs
 from declutr.common.data_utils import sanitize
 
 logger = logging.getLogger(__name__)
-
+import logging
+logging.basicConfig(level=logging.ERROR)
 
 @DatasetReader.register("declutr")
 class DeCLUTRDatasetReader(DatasetReader):

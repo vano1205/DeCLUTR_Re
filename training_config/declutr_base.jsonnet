@@ -6,6 +6,7 @@ local transformer_model = "roberta-base";
 local max_length = 256;
 local min_length = 32;
 
+//num_anchors=2,
 {
     "vocabulary": {
         "type": "empty"
@@ -13,7 +14,6 @@ local min_length = 32;
     "dataset_reader": {
         "type": "declutr",
         "lazy": true,
-        "num_anchors": 2,
         "num_positives": 2,
         "max_span_len": max_length,
         "min_span_len": min_length,
@@ -47,6 +47,7 @@ local min_length = 32;
             "type": "nt_xent",
             "temperature": 0.05,
         },
+        "augment": [7,9,12],
     },
     "data_loader": {
         "batch_size": 4,

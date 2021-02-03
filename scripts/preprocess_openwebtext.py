@@ -147,7 +147,7 @@ def main(
 
                 # Retain documents if # of tokens is greater than the minimum specified length
                 if tokenizer is not None:
-                    num_tokens = len(tokenizer(text))
+                    num_tokens = len(tokenizer(text, truncation = True))
                     if num_tokens < min_length:
                         continue
 

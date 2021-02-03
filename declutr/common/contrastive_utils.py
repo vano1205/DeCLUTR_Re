@@ -41,7 +41,7 @@ def sample_anchor_positive_pairs(
     # Tokenize the incoming text. Whitespace tokenization is much more straightforward
     # (we don't need to worry about chopping up subword tokens), but a user can also provide
     # their own tokenization scheme if they want.
-    tokens = tokenizer(text) if tokenizer is not None else text.split()
+    tokens = tokenizer(text, truncation=True) if tokenizer is not None else text.split()
     tok_method = "tokenizer(text)" if tokenizer else "text.split()"
     num_tokens = len(tokens)
 
