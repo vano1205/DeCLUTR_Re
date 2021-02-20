@@ -7,7 +7,7 @@ from allennlp.modules.token_embedders import PretrainedTransformerEmbedder
 from allennlp.modules.token_embedders.token_embedder import TokenEmbedder
 from overrides import overrides
 from transformers import AutoConfig, AutoModelForMaskedLM
-from declutr.modules.transformer_encoder.bertencoder import BertEncoder, BertLayer
+from declutr.modules.transformer_encoder.bertencoder import BertEncoder, BertLayer, BertEmbeddings
 import numpy as np
 import logging
 logging.basicConfig(level=logging.ERROR)
@@ -121,6 +121,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         self.encoder = BertEncoder(self.config)
         self.layer = torch.nn.ModuleList([BertLayer(self.config)
                                     for _ in range(self.config.num_hidden_layers)])
+        self.embeddings = BertEmbeddings(self.config)
         self.output_hidden_states = self.config.output_hidden_states
 
         if not train_parameters:
@@ -194,6 +195,8 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
             parameters["labels"] = masked_lm_labels
 
         masked_lm_loss = None
+
+        # if augment == -1:
         transformer_output = self.transformer_model(**parameters)
 
         if self.output_hidden_states:
@@ -214,56 +217,25 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                 embeddings, segment_concat_mask, batch_size, num_segment_concat_wordpieces
             )
 
+        # print("embeddings of original @@@@@@@",augment, masked_lm_loss, )
+        # print("embeddings of original @@@@@@@",augment, masked_lm_loss, embeddings)
+
         input_ids = parameters['input_ids']
         device = input_ids.device
 
+        # print("augment val is **********",augment)
         if augment >=0 and augment < 13:
-            # token_type_ids = parameters.get('token_type_ids', None)
-            # labels = parameters.get('labels', None)
-            # print("input ids device", input_ids.device)
-            # # TODO: get_embedding_output define
-            # # embeds = self.transformer_model.get_embedding_output(input_ids=input_ids, token_type_ids=token_type_ids)
-            # input_shape = input_ids.size()
-            # if token_type_ids is None:
-            #     token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-            # embeds = BertEmbeddings(input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
+            # embeds = self.embeddings(input_ids=input_ids)
             embeds = transformer_output[-1][0]
-            # shape of roughly [8, 254, 768]
-            # print("embeds shape is", embeds.shape)
+            # print("transformer output embed shape is ", embeds2)
+            # print("embeds is $$$$$$$$$$", embeds)
+            # shape of roughly [4, 256, 768]
             masks = parameters['attention_mask']
             head_mask = [None] * self.config.num_hidden_layers
 
             if augment == 0:
                 input_lens = torch.sum(masks, dim=1)
                 input_embeds, extended_attention_mask = self.cutoff(embeds, input_lens, device, masks)
-                # input_lens = torch.sum(masks, dim=1)
-                # input_embeds = []
-                # input_masks = []
-                # for i in range(embeds.shape[0]):
-                #     #  args.aug_cutoff_ratio need to be defined (0.1)
-                #     cutoff_length = int(input_lens[i] * 0.1)
-                #     start = int(torch.rand(1).to(device)* (input_lens[i] - cutoff_length))
-                #     # print(input_lens[i], cutoff_length, start)
-                #     cutoff_embed = torch.cat((embeds[i][:start],
-                #                             torch.zeros([cutoff_length, embeds.shape[-1]],
-                #                                         dtype=torch.float).to(device),
-                #                             embeds[i][start + cutoff_length:]), dim=0)
-                #     cutoff_mask = torch.cat((masks[i][:start],
-                #                             torch.zeros([cutoff_length], dtype=torch.long).to(device),
-                #                             masks[i][start + cutoff_length:]), dim=0)
-                #     input_embeds.append(cutoff_embed)
-                #     input_masks.append(cutoff_mask)
-                # input_embeds = torch.stack(input_embeds, dim=0)
-                # input_masks = torch.stack(input_masks, dim=0)
-
-                # # TODO: get_logits_from_embedding_output define
-                # # cutoff_outputs = self.transformer_model.get_logits_from_embedding_output(embedding_output=input_embeds,
-                # #                                                         attention_mask=input_masks, labels=labels
-                # # outputs = self.roberta.get_bert_output(input_embeds, attention_mask=attention_mask)
-
-                # extended_attention_mask = input_masks[:, None, None, :]
-                # extended_attention_mask = extended_attention_mask.to(dtype=next(self.transformer_model.parameters()).dtype)  # fp16 compatibility
-                # extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
                 encoder_outputs = self.encoder(
                     input_embeds,
@@ -291,32 +263,9 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                         hidden_states = layer_outputs[0]
 
                     else:
-                        print("index", index)
+                        # print("index~~~~~~~~~~~~~~~~~~~", index)
                         input_lens = torch.sum(masks, dim=1)
                         input_hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
-                        # input_hidden_states = []
-                        # input_masks = []
-                        # for i in range(hidden_states.shape[0]):
-                        #     #  args.aug_cutoff_ratio need to be defined (0.1)
-                        #     cutoff_length = int(input_lens[i] * 0.1)
-                        #     start = int(torch.rand(1).to(device)* (input_lens[i] - cutoff_length))
-                        #     # print(input_lens[i], cutoff_length, start)
-                        #     cutoff_embed = torch.cat((hidden_states[i][:start],
-                        #                             torch.zeros([cutoff_length, hidden_states.shape[-1]],
-                        #                                         dtype=torch.float).to(device),
-                        #                             hidden_states[i][start + cutoff_length:]), dim=0)
-                        #     cutoff_mask = torch.cat((masks[i][:start],
-                        #                             torch.zeros([cutoff_length], dtype=torch.long).to(device),
-                        #                             masks[i][start + cutoff_length:]), dim=0)
-                        #     input_hidden_states.append(cutoff_embed)
-                        #     input_masks.append(cutoff_mask)
-                        # input_hidden_states = torch.stack(input_hidden_states, dim=0)
-                        # input_masks = torch.stack(input_masks, dim=0)
-
-                        # # layer_module -> output a layer            
-                        # extended_cut_mask = input_masks[:, None, None, :]
-                        # extended_cut_mask = extended_cut_mask.to(dtype=next(self.transformer_model.parameters()).dtype)  # fp16 compatibility
-                        # extended_cut_mask = (1.0 - extended_cut_mask) * -10000.0
 
                         if self.output_hidden_states:
                             all_hidden_states = all_hidden_states + (input_hidden_states,)
@@ -327,80 +276,75 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                             hidden_states = layer_outputs[0]
                 embeddings = hidden_states
     
-                # if self.output_hidden_states:
-                #     all_hidden_states = all_hidden_states + (hidden_states,)
-
-                # outputs = (hidden_states,)
-                # if self.output_hidden_states:
-                #     outputs = outputs + (all_hidden_states,)
-                # if self.output_attentions:
-                #     outputs = outputs + (all_attentions,)
         if augment >= 13:
-            print("PCA color augmentation start!!")
-            layer_num = augment - 13
+            if augment >=26:
+                layer_num = augment-26
+            else: 
+                layer_num = augment-13
+                
+            # print("PCA color augmentation start!!")
+            # print("layer num is ~~~~", layer_num)
             embeds = transformer_output[-1][0]
             masks = parameters['attention_mask']
             head_mask = [None] * self.config.num_hidden_layers
-
             hidden_states = embeds
             extended_attention_mask = masks.unsqueeze(1).unsqueeze(2)
             extended_attention_mask = extended_attention_mask.to(dtype=next(self.transformer_model.parameters()).dtype)  # fp16 compatibility
             extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-            all_hidden_states = ()
-            all_attentions = ()
-            for index, layer_module in enumerate(self.layer):
-                if index != layer_num-1:
-                    if self.output_hidden_states:
-                        all_hidden_states = all_hidden_states + (hidden_states,)
-
-                    layer_outputs = layer_module(
-                        hidden_states, extended_attention_mask, head_mask[index])
-                    hidden_states = layer_outputs[0]
-
-                else:
-                    input_lens = torch.sum(masks, dim=1)
-                    input_hidden_states = []
-                    input_masks = []
-                    for i in range(hidden_states.shape[0]):
-                        layer_matrix = hidden_states[i]
-                        #  expectd shape (seqlen * hidden_state dim)
-                        normed = layer_matrix - torch.mean(layer_matrix)
-                        covariance = np.cov(normed, rowvar=False)
-                        eig_vals, eig_vecs = np.linalg.eigh(covariance)
-                        sort_perm = eig_vals[::-1].argsort()
-                        eig_vals[::-1].sort()
-                        eig_vecs = eig_vecs[:, sort_perm]
-                        m1 = np.column_stack((eig_vecs))
-                        m2 = np.zeros((hidden_states.shape[-1], 1))
-                        # according to the paper alpha should only be draw once per augmentation (not once per channel)
-                        alpha = np.random.normal(0, 0.1)
-                        m2[:, 0] = alpha * eig_vals[:]
-                        add_vect = np.matrix(m1) * np.matrix(m2)
-                        for idx in range(hidden_states.shape[-1]):
-                            layer_matrix[..., idx] += add_vect[idx]
-
-                        input_hidden_states.append(layer_matrix)
-                        # input_masks.append(cutoff_mask)
-                    input_hidden_states = torch.stack(input_hidden_states, dim=0)
-                    # input_masks = torch.stack(input_masks, dim=0)
-
-                    # layer_module -> output a layer            
-                    # extended_cut_mask = input_masks[:, None, None, :]
-                    # extended_cut_mask = extended_cut_mask.to(dtype=next(self.transformer_model.parameters()).dtype)  # fp16 compatibility
-                    # extended_cut_mask = (1.0 - extended_cut_mask) * -10000.0
-
-                    if self.output_hidden_states:
-                        all_hidden_states = all_hidden_states + (input_hidden_states,)
+            if layer_num == 0:
+                input_lens = torch.sum(masks, dim=1)
+                if augment >=26:
+                    # print("hidden state sum before cutoff", torch.sum(hidden_states))
+                    hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
+                input_embeds = self.PCAjitter(hidden_states, device)
+                encoder_outputs = self.encoder(
+                    input_embeds,
+                    attention_mask=extended_attention_mask,
+                    head_mask=head_mask,
+                    encoder_hidden_states=None,
+                    encoder_attention_mask=None,
+                )
+                # print("encoder outputs shape", encoder_outputs[1][-1].shape)
+                embeddings = encoder_outputs[1][-1]
+            
+            else:
+                all_hidden_states = ()
+                for index, layer_module in enumerate(self.layer):
+                    if index != layer_num-1:
+                        if self.output_hidden_states:
+                            all_hidden_states = all_hidden_states + (hidden_states,)
 
                         layer_outputs = layer_module(
-                            input_hidden_states, extended_attention_mask, head_mask[index]
-                        )
+                            hidden_states, extended_attention_mask, head_mask[index])
                         hidden_states = layer_outputs[0]
 
-            embeddings = hidden_states
+                    else:
+                        input_lens = torch.sum(masks, dim=1)
+                        input_hidden_states = []
 
+                        if augment >=26:
+                            # print("hidden state sum before cutoff", torch.sum(hidden_states))
+                            hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
+                            # print("hidden state sum after cutoff", hidden_states)
+                        input_hidden_states = self.PCAjitter(hidden_states, device)
+                        # print("hidden state sum after PCA", input_hidden_states)
 
+                        if self.output_hidden_states:
+                            all_hidden_states = all_hidden_states + (input_hidden_states,)
+                            if augment >=26:
+                                layer_outputs = layer_module(
+                                    input_hidden_states, extended_cut_mask, head_mask[index]
+                            )   
+                            else:
+                                layer_outputs = layer_module(
+                                    input_hidden_states, extended_attention_mask, head_mask[index]
+                                )
+                            hidden_states = layer_outputs[0]
+                # print("len of all_hidden_state ^^^^^^^^^^", len(all_hidden_states))
+                embeddings = hidden_states
+
+        # print("embeddings of changed is ", augment,embeddings)
         return masked_lm_loss, embeddings
 
 
@@ -409,7 +353,8 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
     ) -> torch.Tensor:
         input_embeds = []
         input_masks = []
-        print("embes.shape", embeds.shape[0])
+        # embeds shape -> 4 * 256 * 768
+        # print("embes.shape~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", embeds.shape)
         for i in range(embeds.shape[0]):
             #  args.aug_cutoff_ratio need to be defined (0.1)
             cutoff_length = int(input_lens[i] * 0.1)
@@ -437,3 +382,68 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         return input_embeds, extended_attention_mask
+
+    def PCAjitter(
+        self, hidden_states: torch.Tensor, device: int,
+    ) -> torch.Tensor:
+        input_hidden_states = []
+        for i in range(hidden_states.shape[0]):
+            inner_hidden = hidden_states[i]
+            layer_matrix = inner_hidden / torch.norm(inner_hidden)
+            # print("normmmmmmmmmmmmm", torch.norm(inner_hidden))
+            #  expectd shape (seqlen * hidden_state dim)
+            normed = layer_matrix - torch.mean(layer_matrix)
+            # hidden_state * hidden_state
+            # m_exp = torch.mean(normed, dim=0)
+            # x = normed - m_exp[None,:]
+            # covariance = 1 / (x.size(0) - 1) * x.t().mm(x)
+            # covariance = covariance.to(torch.float64)
+            # # print("covariance", covariance)
+            # eig_vals, eig_vecs = torch.eig(covariance, True)
+            # # print("eig_vals", eig_vals.shape)
+            # sort_perm = torch.argsort(eig_vals[:,:-1], dim=0, descending=True)
+            # sort_perm = sort_perm.view(-1,)
+            # eig_vals, indices = torch.sort(eig_vals[:,:-1],0,True)
+            # eig_vecs = eig_vecs[:,indices]
+            # eig_vecs = torch.squeeze(eig_vecs, 2)
+            # print("eig_vals", eig_vals)
+            # print("eig_shape", eig_vecs.shape)
+            # m1 = torch.transpose(eig_vecs,0,1)
+            # print("m1",m1)
+            #from here
+            covariance = np.cov(normed.cpu().detach().numpy(), rowvar=False)
+            #  eig_vals = 1 * hidden_state , eig_vecs = hidden_state * hidden_state
+            eig_vals, eig_vecs = np.linalg.eigh(covariance)
+            sort_perm = eig_vals[::-1].argsort()
+            eig_vals[::-1].sort()
+            eig_vecs = eig_vecs[:, sort_perm]
+            #  m1 shape is (hidden_state * hidden_state)
+            m1 = np.column_stack((eig_vecs))
+            m1 = torch.from_numpy(m1)
+            # print("m1_after",m1)
+            # to there
+            #  m2 shape is (hidden_state ,1)
+            m2 = torch.zeros(hidden_states.shape[-1], 1)
+            # according to the paper alpha should only be draw once per augmentation (not once per channel)
+            # from here2
+            alpha = np.random.normal(0, 0.1)
+            m2[:,0] = alpha * torch.from_numpy(eig_vals)
+            # alpha = torch.normal(0,0.01, size=(1,1)).to(device=device)
+            # print("alpha shape", alpha.shape)
+            # print("eig_vals", eig_vals.shape)
+            # m2 = alpha * eig_vals
+            # print("m2", m2)
+            # add_vect = np.matrix(m1) * np.matrix(m2)
+            add_vect = torch.matmul(m1.float(), m2)
+            layer_matrix += torch.sum(add_vect)
+            # print("layermatrix fixed", torch.sum(add_vect))
+            # add_vect2 = torch.matmul(m3.float(), m2)
+            # layer_matrix += torch.sum(add_vect2)
+            # print("layermatrix after fixed", torch.sum(add_vect))
+
+            layer_matrix = layer_matrix * torch.norm(inner_hidden)
+
+            # print("shape of layer matrix is $$$$$$$$$", layer_matrix.shape)
+            input_hidden_states.append(layer_matrix)
+        input_hidden_states = torch.stack(input_hidden_states, dim=0)
+        return input_hidden_states

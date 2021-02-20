@@ -179,9 +179,11 @@ class DeCLUTR(Model):
         output_dict: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.Tensor:
         masked_lm_loss, embedded_text = self._text_field_embedder(tokens, augment)
+        # print("embedded text shape", embedded_text.shape)
         mask = get_text_field_mask(tokens).float()
 
         embedded_text = self._seq2vec_encoder(embedded_text, mask=mask)
+        # print("to vec embedded text shape", embedded_text.shape)
         # Don't hold on to embeddings or projections during training.
         if output_dict is not None and not self.training:
             output_dict["embeddings"] = embedded_text.clone().detach()
@@ -192,8 +194,10 @@ class DeCLUTR(Model):
         # When embedding text with a trained model, we want the representation produced by the
         # encoder network. We therefore call these vectors "projections" to distinguish them from
         # the "embeddings".
-        if self._feedforward is not None:
+        if self._feedforward is not None and self.training:
+            # print("feedforward enter!!!!!!!", self.training)
             embedded_text = self._feedforward(embedded_text)
+            # print("feedforward shape is ", embedded_text.shape)
             if output_dict is not None and not self.training:
                 output_dict["projections"] = embedded_text.clone().detach()
 
