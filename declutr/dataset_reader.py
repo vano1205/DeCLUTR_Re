@@ -87,6 +87,7 @@ class DeCLUTRDatasetReader(DatasetReader):
             self._sampling_strategy = (
                 sampling_strategy.lower() if sampling_strategy is not None else sampling_strategy
             )
+            self.instance = 0
             if (
                 self.sample_spans
                 and self._sampling_strategy is not None
@@ -167,8 +168,26 @@ class DeCLUTRDatasetReader(DatasetReader):
         # We DON'T lowercase by default, but rather allow `self._tokenizer` to decide.
         text = sanitize(text, lowercase=False)
 
+        self.instance += 1
+        # print("reading instance is", self.instance)
+        difficulty_step = int(self.instance /49784) - 4
+        # difficulty_step = int(self.instance / 60 ) - 4
+
         fields: Dict[str, Field] = {}
-        if self.sample_spans:
+        # print("difficulty step is ",difficulty_step)
+        # if difficulty_step > 0 :
+        if difficulty_step > 2 :
+            self._num_anchors = 2
+            # self._num_anchors = int(difficulty_step /2) + 1
+            # if self._num_anchors > 3:
+            #     # print("over anchor!")
+            #     self._num_anchors = 3
+            # print("num_anchors", self._num_anchors, self.instance)
+            # sample_difficulty = difficulty_step
+            sample_difficulty = 1
+        else:
+            sample_difficulty = 1
+        if self.sample_spans :
             # Choose the anchor/positives at random.
             anchor_text, positive_text = sample_anchor_positive_pairs(
                 text=text,
@@ -176,8 +195,11 @@ class DeCLUTRDatasetReader(DatasetReader):
                 num_positives=self._num_positives,
                 max_span_len=self._max_span_len,
                 min_span_len=self._min_span_len,
+                difficulty_step = sample_difficulty,
                 sampling_strategy=self._sampling_strategy,
             )
+            # print("anchor_text", anchor_text)
+            # print("positive_text", positive_text)
             anchors: List[Field] = []
             for text in anchor_text:
                 tokens = self._tokenizer.tokenize(text)

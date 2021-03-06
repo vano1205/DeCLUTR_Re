@@ -132,6 +132,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
     def forward(
         self,
         augment: int,
+        difficulty_step: int,
         token_ids: torch.LongTensor,
         mask: torch.BoolTensor,
         type_ids: Optional[torch.LongTensor] = None,
@@ -235,7 +236,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
 
             if augment == 0:
                 input_lens = torch.sum(masks, dim=1)
-                input_embeds, extended_attention_mask = self.cutoff(embeds, input_lens, device, masks)
+                input_embeds, extended_attention_mask = self.cutoff(embeds, input_lens, device, masks, difficulty_step)
 
                 encoder_outputs = self.encoder(
                     input_embeds,
@@ -265,7 +266,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                     else:
                         # print("index~~~~~~~~~~~~~~~~~~~", index)
                         input_lens = torch.sum(masks, dim=1)
-                        input_hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
+                        input_hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks, difficulty_step)
 
                         if self.output_hidden_states:
                             all_hidden_states = all_hidden_states + (input_hidden_states,)
@@ -296,7 +297,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                 input_lens = torch.sum(masks, dim=1)
                 if augment >=26:
                     # print("hidden state sum before cutoff", torch.sum(hidden_states))
-                    hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
+                    hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks, difficulty_step)
                 input_embeds = self.PCAjitter(hidden_states, device)
                 encoder_outputs = self.encoder(
                     input_embeds,
@@ -325,7 +326,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
 
                         if augment >=26:
                             # print("hidden state sum before cutoff", torch.sum(hidden_states))
-                            hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks)
+                            hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks, difficulty_step)
                             # print("hidden state sum after cutoff", hidden_states)
                         input_hidden_states = self.PCAjitter(hidden_states, device)
                         # print("hidden state sum after PCA", input_hidden_states)
@@ -349,7 +350,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
 
 
     def cutoff (
-        self, embeds: torch.Tensor , input_lens: int , device: int, masks: torch.Tensor
+        self, embeds: torch.Tensor , input_lens: int , device: int, masks: torch.Tensor, difficulty_step: int,
     ) -> torch.Tensor:
         input_embeds = []
         input_masks = []
@@ -357,7 +358,9 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         # print("embes.shape~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", embeds.shape)
         for i in range(embeds.shape[0]):
             #  args.aug_cutoff_ratio need to be defined (0.1)
-            cutoff_length = int(input_lens[i] * 0.1)
+            ratio = 0.05 * difficulty_step
+            # print("ratio is ", ratio)
+            cutoff_length = int(input_lens[i] * ratio)
             start = int(torch.rand(1).to(device)* (input_lens[i] - cutoff_length))
             # print(input_lens[i], cutoff_length, start)
             cutoff_embed = torch.cat((embeds[i][:start],
@@ -426,7 +429,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
             m2 = torch.zeros(hidden_states.shape[-1], 1)
             # according to the paper alpha should only be draw once per augmentation (not once per channel)
             # from here2
-            alpha = np.random.normal(0, 0.1)
+            alpha = np.random.normal(0, 0.3)
             m2[:,0] = alpha * torch.from_numpy(eig_vals)
             # alpha = torch.normal(0,0.01, size=(1,1)).to(device=device)
             # print("alpha shape", alpha.shape)

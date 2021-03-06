@@ -13,6 +13,7 @@ def sample_anchor_positive_pairs(
     num_positives: int,
     max_span_len: int,
     min_span_len: int,
+    difficulty_step: int,
     sampling_strategy: Optional[str] = None,
     tokenizer: Optional[Callable[[str], List[str]]] = None,
 ) -> Tuple[List[str], List[str]]:
@@ -98,6 +99,7 @@ def sample_anchor_positive_pairs(
                 # randint is high-exclusive
                 positive_start = np.random.randint(anchor_start, anchor_end - positive_len + 1)
             elif sampling_strategy == "adjacent":
+                # print("adjacent enter@@@@@@@@@@")
                 # Restrict positives to a length that will allow them to be adjacent to the anchor
                 # without running off the edge of the document. If the anchor has sufficent room on
                 # either side, this won't be a problem and max_positive_len will equal max_span_len.
@@ -117,12 +119,16 @@ def sample_anchor_positive_pairs(
                 # anchor and those that border the end. The checks above guarantee at least one of
                 # these is valid. Here we just choose from the valid positive starts at random.
                 valid_starts = []
+                # print("difficulty level is ", difficulty_step)
                 if anchor_start - positive_len > 0:
-                    valid_starts.append(anchor_start - positive_len)
+                    valid_starts.append(anchor_start - difficulty_step * positive_len)
+                    # valid_starts.append(anchor_start - positive_len)
                 if anchor_end + positive_len <= num_tokens:
-                    valid_starts.append(anchor_end)
+                    valid_starts.append(anchor_end + (difficulty_step - 1) * positive_len)
+                    # valid_starts.append(anchor_end)
                 positive_start = np.random.choice(valid_starts)
             else:
+                # print("both adjacent and subsuming")
                 # Sample positive length from a beta distribution skewed towards shorter spans. The
                 # idea is to promote diversity and minimize the amount of overlapping text.
                 positive_len = int(

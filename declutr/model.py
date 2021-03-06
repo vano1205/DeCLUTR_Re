@@ -3,9 +3,9 @@ from typing import Dict, Optional
 import torch
 import numpy as np
 from allennlp.data import TextFieldTensors, Vocabulary
-# from allennlp.models.model import Model
+from allennlp.models.model import Model
 from typing import List
-from load_model.model import Model, _DEFAULT_WEIGHTS
+# from load_model.model import Model
 from allennlp.modules import FeedForward, Seq2VecEncoder, TextFieldEmbedder
 from allennlp.modules.seq2vec_encoders import BagOfEmbeddingsEncoder
 from allennlp.nn import InitializerApplicator
@@ -16,6 +16,8 @@ from declutr.common.model_utils import all_gather_anchor_positive_pairs, unpack_
 from declutr.losses import PyTorchMetricLearningLoss
 from declutr.miners import PyTorchMetricLearningMiner
 import logging
+import torch.nn as nn
+import random
 logging.basicConfig(level=logging.ERROR)
 
 @Model.register("declutr")
@@ -84,6 +86,8 @@ class DeCLUTR(Model):
 
         self.augment = augment
 
+        self.iteration = 0
+
         self._miner = miner
         self._loss = loss
         if self._loss is None and not self._masked_language_modeling:
@@ -129,18 +133,28 @@ class DeCLUTR(Model):
             anchors = mask_tokens(anchors, self._tokenizer)
         # This is the textual representation learned by a model and used for downstream tasks.
         masked_lm_loss, embedded_anchors = self._forward_internal(anchors, -1, output_dict)
+        self.iteration += 1
+        # print("self iteration", self.iteration)
+        difficulty_step = int(self.iteration / 12446) + 1
+        # difficulty_step = int(self.iteration / 15) +1
 
         # If positives are supplied by DataLoader and we are training, compute a contrastive loss.
         if self.training:
             output_dict["loss"] = 0
             # TODO: We should throw a ValueError if no postives provided by loss is not None.
             if self._loss is not None:
-                if len(self.augment) == 0: 
+                # if difficulty_step > 5:
+                #     sampling_gate = random.randint(0,1)
+                # else:
+                #     sampling_gate = 0
+                # if len(self.augment) == 0: 
+                if difficulty_step > 5:
+                    # print("enter sampling!!!!!")
                     # Like the anchors, if we sampled multiple positives, we need to unpack them.
                     positives = unpack_batch(positives)
                     # Positives are represented by their mean embedding a la
                     # https://arxiv.org/abs/1902.09229.
-                    _, embedded_positives = self._forward_internal(positives, -1)
+                    _, embedded_positives = self._forward_internal(positives, -1, difficulty_step)
                     embedded_positive_chunks = []
                     for i, chunk in enumerate(
                         torch.chunk(embedded_positives, chunks=embedded_anchors.size(0), dim=0)
@@ -160,14 +174,25 @@ class DeCLUTR(Model):
                 else: 
                     augment = np.random.choice(self.augment,1)[0]
                     # print("augment value is ~~~~~~~~~~~~~~~~~~~~", augment)
-                    _, embedded_positives = self._forward_internal(anchors, augment)
+                    # _, embedded_positives = self._forward_internal(anchors, augment, difficulty_step)
+                    _, embedded_positives = self._forward_internal(anchors, augment, 2)
+                    embedded_anchors, embedded_positives = all_gather_anchor_positive_pairs(
+                        embedded_anchors, embedded_positives
+                    )
+                # print("embedded_anchors", embedded_anchors)
+                # print("embedded_positives",embedded_positives)
+                # cos = nn.CosineSimilarity()
+                # output = cos(embedded_anchors, embedded_positives)
+                # print("cosine similarity is", output)
                 embeddings, labels = self._loss.get_embeddings_and_labels(
                     embedded_anchors, embedded_positives
                 )
                 indices_tuple = self._miner(embeddings, labels) if self._miner is not None else None
                 output_dict["loss"] += self._loss(embeddings, labels, indices_tuple)
+                # print("contrastive loss is ", output_dict["loss"], self.iteration)
             # Loss may be derived from contrastive objective, MLM objective or both.
             if masked_lm_loss is not None:
+                # print("mlm loss is ", masked_lm_loss)
                 output_dict["loss"] += masked_lm_loss
 
         return output_dict
@@ -176,9 +201,10 @@ class DeCLUTR(Model):
         self,
         tokens: TextFieldTensors,
         augment : int,
+        difficulty_step : int,
         output_dict: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.Tensor:
-        masked_lm_loss, embedded_text = self._text_field_embedder(tokens, augment)
+        masked_lm_loss, embedded_text = self._text_field_embedder(tokens, augment, difficulty_step)
         # print("embedded text shape", embedded_text.shape)
         mask = get_text_field_mask(tokens).float()
 
