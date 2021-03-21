@@ -10,6 +10,7 @@ from transformers import AutoConfig, AutoModelForMaskedLM
 from declutr.modules.transformer_encoder.bertencoder import BertEncoder, BertLayer, BertEmbeddings
 import numpy as np
 import logging
+import random
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -298,7 +299,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                 if augment >=26:
                     # print("hidden state sum before cutoff", torch.sum(hidden_states))
                     hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks, difficulty_step)
-                input_embeds = self.PCAjitter(hidden_states, device)
+                input_embeds = self.PCAjitter(hidden_states, device, difficulty_step)
                 encoder_outputs = self.encoder(
                     input_embeds,
                     attention_mask=extended_attention_mask,
@@ -328,7 +329,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                             # print("hidden state sum before cutoff", torch.sum(hidden_states))
                             hidden_states, extended_cut_mask = self.cutoff(hidden_states, input_lens, device, masks, difficulty_step)
                             # print("hidden state sum after cutoff", hidden_states)
-                        input_hidden_states = self.PCAjitter(hidden_states, device)
+                        input_hidden_states = self.PCAjitter(hidden_states, device, difficulty_step)
                         # print("hidden state sum after PCA", input_hidden_states)
 
                         if self.output_hidden_states:
@@ -355,11 +356,15 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         input_embeds = []
         input_masks = []
         # embeds shape -> 4 * 256 * 768
+        # print("difficulty step of cutoff is", difficulty_step)
         # print("embes.shape~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", embeds.shape)
+        # difficulty_step = random.randint(1,difficulty_step)
         for i in range(embeds.shape[0]):
+            if difficulty_step > 10:
+                difficulty_step = 10
             #  args.aug_cutoff_ratio need to be defined (0.1)
-            ratio = 0.05 * difficulty_step
-            # print("ratio is ", ratio)
+            ratio = 0.02 * difficulty_step
+            print("ratio is ", ratio)
             cutoff_length = int(input_lens[i] * ratio)
             start = int(torch.rand(1).to(device)* (input_lens[i] - cutoff_length))
             # print(input_lens[i], cutoff_length, start)
@@ -387,9 +392,11 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         return input_embeds, extended_attention_mask
 
     def PCAjitter(
-        self, hidden_states: torch.Tensor, device: int,
+        self, hidden_states: torch.Tensor, device: int, difficulty_step: int,
     ) -> torch.Tensor:
         input_hidden_states = []
+        # print("pcajitter enter!",difficulty_step)
+        # difficulty_step = random.randint(1,difficulty_step)
         for i in range(hidden_states.shape[0]):
             inner_hidden = hidden_states[i]
             layer_matrix = inner_hidden / torch.norm(inner_hidden)
@@ -429,7 +436,12 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
             m2 = torch.zeros(hidden_states.shape[-1], 1)
             # according to the paper alpha should only be draw once per augmentation (not once per channel)
             # from here2
-            alpha = np.random.normal(0, 0.3)
+
+            if difficulty_step > 10:
+                difficulty_step = 10
+            print("difficulty step of pca is", 0.005 * difficulty_step)
+            alpha = np.random.normal(0, 0.005 * difficulty_step)
+            # print("alpha val is ", alpha)
             m2[:,0] = alpha * torch.from_numpy(eig_vals)
             # alpha = torch.normal(0,0.01, size=(1,1)).to(device=device)
             # print("alpha shape", alpha.shape)

@@ -1,11 +1,12 @@
 import logging
 import random
+import torch
 from contextlib import contextmanager
 from typing import Any, Dict, Iterable, Iterator, List
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers import DatasetReader
-from allennlp.data.fields import Field, ListField, TextField
+from allennlp.data.fields import Field, ListField, TextField, LabelField
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
 from allennlp.data.tokenizers import SpacyTokenizer, Tokenizer
@@ -13,6 +14,9 @@ from overrides import overrides
 
 from declutr.common.contrastive_utils import sample_anchor_positive_pairs
 from declutr.common.data_utils import sanitize
+import random
+from allennlp.common import util
+import torch.distributed as dist
 
 logger = logging.getLogger(__name__)
 import logging
@@ -72,6 +76,7 @@ class DeCLUTRDatasetReader(DatasetReader):
 
         # If the user provided us with a number of anchors to sample, we automatically
         # check that the other expected values are provided and valid.
+        self.instance = 0
         if num_anchors is not None:
             self._num_anchors = num_anchors
             self.sample_spans = True
@@ -87,7 +92,6 @@ class DeCLUTRDatasetReader(DatasetReader):
             self._sampling_strategy = (
                 sampling_strategy.lower() if sampling_strategy is not None else sampling_strategy
             )
-            self.instance = 0
             if (
                 self.sample_spans
                 and self._sampling_strategy is not None
@@ -137,10 +141,11 @@ class DeCLUTRDatasetReader(DatasetReader):
                 data = list(enumerate(data_file))
                 random.shuffle(data)
                 data = iter(data)
+                # data = enumerate(data_file)
             else:
                 data = enumerate(data_file)
-
-            for _, text in data:
+            for idx , text in data:
+                # print("distributed", util.is_distributed())
                 yield self.text_to_instance(text)
 
     @overrides
@@ -168,26 +173,41 @@ class DeCLUTRDatasetReader(DatasetReader):
         # We DON'T lowercase by default, but rather allow `self._tokenizer` to decide.
         text = sanitize(text, lowercase=False)
 
+        difficulty_step = int(self.instance /49784) + 1
+        difficulty_step_sample = int(self.instance / 165944) + 1
+        # difficulty_step_sample = int(self.instance / 32) + 1
+        # difficulty_step = int(self.instance /32) + 1
         self.instance += 1
-        # print("reading instance is", self.instance)
-        difficulty_step = int(self.instance /49784) - 4
-        # difficulty_step = int(self.instance / 60 ) - 4
-
+        
         fields: Dict[str, Field] = {}
-        # print("difficulty step is ",difficulty_step)
-        # if difficulty_step > 0 :
-        if difficulty_step > 2 :
-            self._num_anchors = 2
-            # self._num_anchors = int(difficulty_step /2) + 1
-            # if self._num_anchors > 3:
-            #     # print("over anchor!")
-            #     self._num_anchors = 3
-            # print("num_anchors", self._num_anchors, self.instance)
-            # sample_difficulty = difficulty_step
-            sample_difficulty = 1
-        else:
-            sample_difficulty = 1
         if self.sample_spans :
+            # print("reading instance is", self.instance)
+            # difficulty_step = int(self.instance / 40 ) + 1
+
+            # # print("difficulty step is ",difficulty_step)
+            # if difficulty_step > 5 :
+            # # if difficulty_step > 2 :
+            #     # self._num_anchors = 2
+            #     # self._num_anchors = int(difficulty_step /2) + 1
+            #     # self._num_anchors = int((difficulty_step - 1)/2) - 1
+            #     self._num_anchors = difficulty_step_sample
+            #     if self._num_anchors > 3:
+            #         # print("over anchor!")
+            #         self._num_anchors = 3
+            #     # self._num_anchors = random.randint(1, self._num_anchors)
+            #     # print("num_anchors", self._num_anchors, self.instance, difficulty_step)
+            #     # sample_difficulty = difficulty_step
+            #     sample_difficulty = 1
+            # else:
+            #     sample_difficulty = 1
+            self._num_anchors = difficulty_step_sample
+            if self._num_anchors > 3:
+                # print("over anchor!")
+                self._num_anchors = 3
+            sample_difficulty = 1
+            print("anchor num is", self._num_anchors)
+
+            # fields["text"] = LabelField(len(text), skip_indexing=True)
             # Choose the anchor/positives at random.
             anchor_text, positive_text = sample_anchor_positive_pairs(
                 text=text,
@@ -210,7 +230,10 @@ class DeCLUTRDatasetReader(DatasetReader):
                 tokens = self._tokenizer.tokenize(text)
                 positives.append(TextField(tokens, self._token_indexers))
             fields["positives"] = ListField(positives)
+            fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)
         else:
+            # print("no sampling")
             tokens = self._tokenizer.tokenize(text)
             fields["anchors"] = TextField(tokens, self._token_indexers)
+            fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)
         return Instance(fields)

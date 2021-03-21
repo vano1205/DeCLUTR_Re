@@ -6,7 +6,6 @@ local transformer_model = "roberta-base";
 local max_length = 256;
 local min_length = 32;
 
-//num_anchors=2,
 {
     "vocabulary": {
         "type": "empty"
@@ -14,9 +13,11 @@ local min_length = 32;
     "dataset_reader": {
         "type": "declutr",
         "lazy": true,
+        //"num_anchors": 1,
         "num_positives": 2,
         "max_span_len": max_length,
         "min_span_len": min_length,
+        //"sampling_strategy": "adjacent",
         "tokenizer": {
             "type": "pretrained_transformer",
             "model_name": transformer_model,
@@ -47,7 +48,8 @@ local min_length = 32;
             "type": "nt_xent",
             "temperature": 0.05,
         },
-        "augment": [7,9,12],
+        "augment": [33,35,38],
+        "feedforward" : {"input_dim": 768, "num_layers": 2, "hidden_dims": [768, 768], "activations": ["relu", "linear"]}
     },
     "data_loader": {
         "batch_size": 4,
@@ -56,7 +58,7 @@ local min_length = 32;
     },
     "trainer": {
         // Set use_amp to true to use automatic mixed-precision during training (if your GPU supports it)
-        "cuda_device" : 4,
+        "cuda_device" : 0,
         "use_amp": true,
         "optimizer": {
             "type": "huggingface_adamw",
@@ -81,4 +83,7 @@ local min_length = 32;
             "type": "slanted_triangular",
         },
     },
+    //"distributed": {
+    //    "cuda_devices": [0, 1],
+    //},
 }

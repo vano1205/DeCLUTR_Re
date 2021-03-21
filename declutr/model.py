@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import torch
 import numpy as np
 from allennlp.data import TextFieldTensors, Vocabulary
+from allennlp.data.fields import LabelField
 from allennlp.models.model import Model
 from typing import List
 # from load_model.model import Model
@@ -100,7 +101,8 @@ class DeCLUTR(Model):
         initializer(self)
 
     def forward(  # type: ignore
-        self, anchors: TextFieldTensors, positives: TextFieldTensors = None
+        # self, anchors: TextFieldTensors, positives: TextFieldTensors = None, difficulty: LabelField = None, text: LabelField = None,
+        self, anchors: TextFieldTensors, positives: TextFieldTensors = None, difficulty: LabelField = None, 
     ) -> Dict[str, torch.Tensor]:
 
         """
@@ -133,10 +135,13 @@ class DeCLUTR(Model):
             anchors = mask_tokens(anchors, self._tokenizer)
         # This is the textual representation learned by a model and used for downstream tasks.
         masked_lm_loss, embedded_anchors = self._forward_internal(anchors, -1, output_dict)
-        self.iteration += 1
-        # print("self iteration", self.iteration)
-        difficulty_step = int(self.iteration / 12446) + 1
+        # self.iteration += 1
+        # print("instance from reader is ", difficulty, self.iteration)
+        difficulty_step = int( difficulty[0] )
+        # print("self iteration and instance", self.iteration)
+        # difficulty_step = int(self.iteration / 12446) + 1
         # difficulty_step = int(self.iteration / 15) +1
+        # print("difficulty step of model.py", self.iteration, difficulty_step)
 
         # If positives are supplied by DataLoader and we are training, compute a contrastive loss.
         if self.training:
@@ -144,12 +149,14 @@ class DeCLUTR(Model):
             # TODO: We should throw a ValueError if no postives provided by loss is not None.
             if self._loss is not None:
                 # if difficulty_step > 5:
-                #     sampling_gate = random.randint(0,1)
+                #     sampling_gate = random.randint(0,2)
                 # else:
                 #     sampling_gate = 0
-                # if len(self.augment) == 0: 
-                if difficulty_step > 5:
-                    # print("enter sampling!!!!!")
+                if len(self.augment) == 0: 
+                # if difficulty_step > 5:
+                # sampling_gate = random.randint(0,1)
+                # if sampling_gate > 0:
+                    print("enter sampling!!!!!")
                     # Like the anchors, if we sampled multiple positives, we need to unpack them.
                     positives = unpack_batch(positives)
                     # Positives are represented by their mean embedding a la
@@ -173,9 +180,10 @@ class DeCLUTR(Model):
                     # before computing the loss (with an optional mining step).
                 else: 
                     augment = np.random.choice(self.augment,1)[0]
+                    # print("augment difficulty is ", difficulty_step)
                     # print("augment value is ~~~~~~~~~~~~~~~~~~~~", augment)
-                    # _, embedded_positives = self._forward_internal(anchors, augment, difficulty_step)
-                    _, embedded_positives = self._forward_internal(anchors, augment, 2)
+                    _, embedded_positives = self._forward_internal(anchors, augment, difficulty_step)
+                    # _, embedded_positives = self._forward_internal(anchors, augment, 2)
                     embedded_anchors, embedded_positives = all_gather_anchor_positive_pairs(
                         embedded_anchors, embedded_positives
                     )
