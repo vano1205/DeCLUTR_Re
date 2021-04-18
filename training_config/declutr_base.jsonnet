@@ -3,7 +3,7 @@
 local transformer_model = "roberta-base";
 
 // This will be used to set the max/min # of tokens in the positive and negative examples.
-local max_length = 256;
+local max_length = 512;
 local min_length = 32;
 
 {
@@ -13,11 +13,10 @@ local min_length = 32;
     "dataset_reader": {
         "type": "declutr",
         "lazy": true,
-        //"num_anchors": 1,
-        "num_positives": 2,
+        "num_anchors": 1,
+        //"num_positives": 2,
         "max_span_len": max_length,
         "min_span_len": min_length,
-        //"sampling_strategy": "adjacent",
         "tokenizer": {
             "type": "pretrained_transformer",
             "model_name": transformer_model,
@@ -40,7 +39,8 @@ local min_length = 32;
                 "tokens": {
                     "type": "pretrained_transformer_mlm",
                     "model_name": transformer_model,
-                    "masked_language_modeling": true
+                    "masked_language_modeling": true,
+                    "load_directory": "None",
                 },
             },
         },
@@ -83,7 +83,4 @@ local min_length = 32;
             "type": "slanted_triangular",
         },
     },
-    //"distributed": {
-    //    "cuda_devices": [0, 1],
-    //},
 }
