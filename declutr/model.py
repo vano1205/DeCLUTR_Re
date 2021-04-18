@@ -19,7 +19,6 @@ from declutr.miners import PyTorchMetricLearningMiner
 import logging
 import torch.nn as nn
 import random
-logging.basicConfig(level=logging.ERROR)
 
 @Model.register("declutr")
 class DeCLUTR(Model):
@@ -85,10 +84,6 @@ class DeCLUTR(Model):
         )
         self._feedforward = feedforward
 
-        self.augment = augment
-
-        self.iteration = 0
-
         self._miner = miner
         self._loss = loss
         if self._loss is None and not self._masked_language_modeling:
@@ -101,7 +96,6 @@ class DeCLUTR(Model):
         initializer(self)
 
     def forward(  # type: ignore
-        # self, anchors: TextFieldTensors, positives: TextFieldTensors = None, difficulty: LabelField = None, text: LabelField = None,
         self, anchors: TextFieldTensors, positives: TextFieldTensors = None, difficulty: LabelField = None, 
     ) -> Dict[str, torch.Tensor]:
 
@@ -130,19 +124,18 @@ class DeCLUTR(Model):
         output_dict: Dict[str, torch.Tensor] = {}
         # If multiple anchors were sampled, we need to unpack them.
         anchors = unpack_batch(anchors)
+        # print("anchor token len is ", len(anchors["tokens"]))
         # Mask anchor input ids and get labels required for MLM.
         if self.training and self._masked_language_modeling:
             anchors = mask_tokens(anchors, self._tokenizer)
         # This is the textual representation learned by a model and used for downstream tasks.
-        masked_lm_loss, embedded_anchors = self._forward_internal(anchors, -1, output_dict)
+        masked_lm_loss, embedded_anchors = self._forward_internal(anchors, -1, output_dict=output_dict)
         # self.iteration += 1
         # print("instance from reader is ", difficulty, self.iteration)
-        difficulty_step = int( difficulty[0] )
-        # print("self iteration and instance", self.iteration)
-        # difficulty_step = int(self.iteration / 12446) + 1
-        # difficulty_step = int(self.iteration / 15) +1
-        # print("difficulty step of model.py", self.iteration, difficulty_step)
-
+        if difficulty is not None: 
+            difficulty_step = int( difficulty[0] )
+        else:
+            difficulty_step = -100
         # If positives are supplied by DataLoader and we are training, compute a contrastive loss.
         if self.training:
             output_dict["loss"] = 0
@@ -152,16 +145,18 @@ class DeCLUTR(Model):
                 #     sampling_gate = random.randint(0,2)
                 # else:
                 #     sampling_gate = 0
+                # sampling_gate = random.randint(0,1)
                 if len(self.augment) == 0: 
                 # if difficulty_step > 5:
-                # sampling_gate = random.randint(0,1)
+                # if True:
+                # sampling_gate = random.randint(0,2)
                 # if sampling_gate > 0:
-                    print("enter sampling!!!!!")
+                    # print("enter sampling!!!!!")
                     # Like the anchors, if we sampled multiple positives, we need to unpack them.
                     positives = unpack_batch(positives)
                     # Positives are represented by their mean embedding a la
                     # https://arxiv.org/abs/1902.09229.
-                    _, embedded_positives = self._forward_internal(positives, -1, difficulty_step)
+                    _, embedded_positives = self._forward_internal(positives, -1, difficulty_step=difficulty_step)
                     embedded_positive_chunks = []
                     for i, chunk in enumerate(
                         torch.chunk(embedded_positives, chunks=embedded_anchors.size(0), dim=0)
@@ -182,8 +177,12 @@ class DeCLUTR(Model):
                     augment = np.random.choice(self.augment,1)[0]
                     # print("augment difficulty is ", difficulty_step)
                     # print("augment value is ~~~~~~~~~~~~~~~~~~~~", augment)
-                    _, embedded_positives = self._forward_internal(anchors, augment, difficulty_step)
+                    # _, embedded_positives2 = self._forward_internal(anchors, augment, difficulty_step)
+                    _, embedded_positives = self._forward_internal(anchors, augment, difficulty_step=difficulty_step)
                     # _, embedded_positives = self._forward_internal(anchors, augment, 2)
+                    # embedded_anchors, embedded_positives2 = all_gather_anchor_positive_pairs(
+                    #     embedded_anchors, embedded_positives2
+                    # )
                     embedded_anchors, embedded_positives = all_gather_anchor_positive_pairs(
                         embedded_anchors, embedded_positives
                     )
@@ -197,6 +196,13 @@ class DeCLUTR(Model):
                 )
                 indices_tuple = self._miner(embeddings, labels) if self._miner is not None else None
                 output_dict["loss"] += self._loss(embeddings, labels, indices_tuple)
+                # output_dict["loss"] += (self._loss(embeddings, labels, indices_tuple))*1/2
+
+                # embeddings2, labels2 = self._loss.get_embeddings_and_labels(
+                #     embedded_anchors, embedded_positives2
+                # )
+                # indices_tuple2 = self._miner(embeddings2, labels2) if self._miner is not None else None
+                # output_dict["loss"] += (self._loss(embeddings2, labels2, indices_tuple2))*1/2
                 # print("contrastive loss is ", output_dict["loss"], self.iteration)
             # Loss may be derived from contrastive objective, MLM objective or both.
             if masked_lm_loss is not None:
@@ -204,13 +210,14 @@ class DeCLUTR(Model):
                 output_dict["loss"] += masked_lm_loss
 
         return output_dict
+        # print("output dict is ", output_dict)
 
     def _forward_internal(
         self,
         tokens: TextFieldTensors,
         augment : int,
-        difficulty_step : int,
         output_dict: Optional[Dict[str, torch.Tensor]] = None,
+        difficulty_step: int = None,
     ) -> torch.Tensor:
         masked_lm_loss, embedded_text = self._text_field_embedder(tokens, augment, difficulty_step)
         # print("embedded text shape", embedded_text.shape)

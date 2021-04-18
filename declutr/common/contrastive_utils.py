@@ -70,7 +70,8 @@ def sample_anchor_positive_pairs(
         # Sample the anchor length from a beta distribution skewed towards longer spans, the
         # intuition being that longer spans have the best chance of being representative of the
         # document they are sampled from.
-        anchor_len = int(np.random.beta(4, 2) * (max_span_len - min_span_len) + min_span_len)
+        # anchor_len = int(np.random.beta(4, 2) * (max_span_len - min_span_len) + min_span_len)
+        anchor_len = max_span_len
         # This check prevents an edge case were we run out of valid_anchor_starts.
         if len(valid_anchor_starts) // (num_anchors - i) < num_anchors - i:
             anchor_start_idx = np.random.choice([0, len(valid_anchor_starts) - 1])
@@ -87,61 +88,66 @@ def sample_anchor_positive_pairs(
         anchor_end = anchor_start + anchor_len
         anchors.append(" ".join(tokens[anchor_start:anchor_end]))
 
-        # Sample positives from around the anchor. The intuition being that text that appears
-        # close together is the same document is likely to be semantically similar.
-        for _ in range(num_positives):
-            # A user can specify a subsuming or adjacent only sampling strategy.
-            if sampling_strategy == "subsuming":
-                # To be strictly subsuming, we cannot allow the positive_len > anchor_len.
-                positive_len = int(
-                    np.random.beta(2, 4) * (anchor_len - min_span_len) + min_span_len
-                )
-                # randint is high-exclusive
-                positive_start = np.random.randint(anchor_start, anchor_end - positive_len + 1)
-            elif sampling_strategy == "adjacent":
-                # print("adjacent enter@@@@@@@@@@")
-                # Restrict positives to a length that will allow them to be adjacent to the anchor
-                # without running off the edge of the document. If the anchor has sufficent room on
-                # either side, this won't be a problem and max_positive_len will equal max_span_len.
-                max_positive_len = min(max_span_len, max(anchor_start, num_tokens - anchor_end))
-                if max_positive_len < max_span_len:
-                    logger.warning_once(
-                        (
-                            "There is no room to sample an adjacent positive span. Temporarily"
-                            " reducing the maximum span length of positives. This message will not"
-                            " be displayed again."
-                        )
-                    )
-                positive_len = int(
-                    np.random.beta(2, 4) * (max_positive_len - min_span_len) + min_span_len
-                )
-                # There are two types of adjacent positives, those that border the beginning of the
-                # anchor and those that border the end. The checks above guarantee at least one of
-                # these is valid. Here we just choose from the valid positive starts at random.
-                valid_starts = []
-                # print("difficulty level is ", difficulty_step)
-                if anchor_start - positive_len > 0:
-                    valid_starts.append(anchor_start - difficulty_step * positive_len)
-                    # valid_starts.append(anchor_start - positive_len)
-                if anchor_end + positive_len <= num_tokens:
-                    valid_starts.append(anchor_end + (difficulty_step - 1) * positive_len)
-                    # valid_starts.append(anchor_end)
-                positive_start = np.random.choice(valid_starts)
-            else:
-                # print("both adjacent and subsuming")
-                # Sample positive length from a beta distribution skewed towards shorter spans. The
-                # idea is to promote diversity and minimize the amount of overlapping text.
-                positive_len = int(
-                    np.random.beta(2, 4) * (max_span_len - min_span_len) + min_span_len
-                )
-                # By default, spans may be adjacent or overlap with each other and the anchor.
-                # Careful not to run off the edges of the document (this error may pass silently).
-                positive_start = np.random.randint(
-                    max(0, anchor_start - positive_len),
-                    min(anchor_end, num_tokens - positive_len) + 1,  # randint is high-exclusive
-                )
+    #     # Sample positives from around the anchor. The intuition being that text that appears
+    #     # close together is the same document is likely to be semantically similar.
+    #     for _ in range(num_positives):
+    #         # A user can specify a subsuming or adjacent only sampling strategy.
+    #         if sampling_strategy == "subsuming":
+    #             # To be strictly subsuming, we cannot allow the positive_len > anchor_len.
+    #             positive_len = int(
+    #                 np.random.beta(2, 4) * (anchor_len - min_span_len) + min_span_len
+    #             )
+    #             # randint is high-exclusive
+    #             positive_start = np.random.randint(anchor_start, anchor_end - positive_len + 1)
+    #         elif sampling_strategy == "adjacent":
+    #             # print("adjacent enter@@@@@@@@@@")
+    #             # Restrict positives to a length that will allow them to be adjacent to the anchor
+    #             # without running off the edge of the document. If the anchor has sufficent room on
+    #             # either side, this won't be a problem and max_positive_len will equal max_span_len.
+    #             max_positive_len = min(max_span_len, max(anchor_start, num_tokens - anchor_end))
+    #             if max_positive_len < max_span_len:
+    #                 logger.warning_once(
+    #                     (
+    #                         "There is no room to sample an adjacent positive span. Temporarily"
+    #                         " reducing the maximum span length of positives. This message will not"
+    #                         " be displayed again."
+    #                     )
+    #                 )
+    #             positive_len = int(
+    #                 np.random.beta(2, 4) * (max_positive_len - min_span_len) + min_span_len
+    #             )
+    #             # There are two types of adjacent positives, those that border the beginning of the
+    #             # anchor and those that border the end. The checks above guarantee at least one of
+    #             # these is valid. Here we just choose from the valid positive starts at random.
+    #             valid_starts = []
+    #             # print("difficulty level is ", difficulty_step)
+    #             if anchor_start - positive_len > 0:
+    #                 valid_starts.append(anchor_start - difficulty_step * positive_len)
+    #                 # valid_starts.append(anchor_start - positive_len)
+    #             if anchor_end + positive_len <= num_tokens:
+    #                 valid_starts.append(anchor_end + (difficulty_step - 1) * positive_len)
+    #                 # valid_starts.append(anchor_end)
+    #             positive_start = np.random.choice(valid_starts)
+    #         else:
+    #             # print("both adjacent and subsuming")
+    #             # Sample positive length from a beta distribution skewed towards shorter spans. The
+    #             # idea is to promote diversity and minimize the amount of overlapping text.
+    #             positive_len = int(
+    #                 np.random.beta(2, 4) * (max_span_len - min_span_len) + min_span_len
+    #             )
+    #             # By default, spans may be adjacent or overlap with each other and the anchor.
+    #             # Careful not to run off the edges of the document (this error may pass silently).
+    #             positive_start = np.random.randint(
+    #                 max(0, anchor_start - positive_len),
+    #                 min(anchor_end, num_tokens - positive_len) + 1,  # randint is high-exclusive
+    #             )
+    #             # positive_start = np.random.randint(
+    #             #     max(0, anchor_start - 0.2 * difficulty_step * positive_len),
+    #             #     min(anchor_end + (0.2 * difficulty_step -1) * positive_len , num_tokens - positive_len) + 1,  # randint is high-exclusive
+    #             # )
 
-            positive_end = positive_start + positive_len
-            positives.append(" ".join(tokens[positive_start:positive_end]))
+    #         positive_end = positive_start + positive_len
+    #         positives.append(" ".join(tokens[positive_start:positive_end]))
 
-    return anchors, positives
+    # return anchors, positives
+    return anchors

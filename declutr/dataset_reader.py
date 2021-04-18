@@ -80,8 +80,8 @@ class DeCLUTRDatasetReader(DatasetReader):
         if num_anchors is not None:
             self._num_anchors = num_anchors
             self.sample_spans = True
-            if num_positives is None:
-                raise ValueError("num_positives must be provided if num_anchors is not None.")
+            # if num_positives is None:
+            #     raise ValueError("num_positives must be provided if num_anchors is not None.")
             if max_span_len is None:
                 raise ValueError("max_span_len must be provided if num_anchors is not None.")
             if min_span_len is None:
@@ -174,9 +174,13 @@ class DeCLUTRDatasetReader(DatasetReader):
         text = sanitize(text, lowercase=False)
 
         difficulty_step = int(self.instance /49784) + 1
-        difficulty_step_sample = int(self.instance / 165944) + 1
-        # difficulty_step_sample = int(self.instance / 32) + 1
-        # difficulty_step = int(self.instance /32) + 1
+        # difficulty_step = self.instance
+        # difficulty_step = -100
+        # difficulty_step_sample = int(self.instance / 165944) + 1
+        # difficulty_step_sample = int(self.instance / 82972) - 2
+        # difficulty_step = int(self.instance / 24 ) + 1
+        # difficulty_step_sample = int(self.instance /44) - 2
+        # difficulty_step_sample = int(self.instance / 80 ) + 1
         self.instance += 1
         
         fields: Dict[str, Field] = {}
@@ -199,17 +203,41 @@ class DeCLUTRDatasetReader(DatasetReader):
             #     # sample_difficulty = difficulty_step
             #     sample_difficulty = 1
             # else:
-            #     sample_difficulty = 1
-            self._num_anchors = difficulty_step_sample
-            if self._num_anchors > 3:
-                # print("over anchor!")
-                self._num_anchors = 3
+            #     sample_difficulty = 1 
+            # self._num_anchors = difficulty_step_sample
+            # if difficulty_step_sample <=0 :
+            #     self._num_anchors = 1
+            # if self._num_anchors > 3:
+            #     # print("over anchor!")
+            #     self._num_anchors = 3
             sample_difficulty = 1
-            print("anchor num is", self._num_anchors)
+            # print("anchor num is", self._num_anchors)
 
             # fields["text"] = LabelField(len(text), skip_indexing=True)
             # Choose the anchor/positives at random.
-            anchor_text, positive_text = sample_anchor_positive_pairs(
+            # anchor_text, positive_text = sample_anchor_positive_pairs(
+            #     text=text,
+            #     num_anchors=self._num_anchors,
+            #     num_positives=self._num_positives,
+            #     max_span_len=self._max_span_len,
+            #     min_span_len=self._min_span_len,
+            #     difficulty_step = sample_difficulty,
+            #     sampling_strategy=self._sampling_strategy,
+            # )
+            # # print("anchor_text", anchor_text)
+            # # print("positive_text", positive_text)
+            # anchors: List[Field] = []
+            # for text in anchor_text:
+            #     tokens = self._tokenizer.tokenize(text)
+            #     anchors.append(TextField(tokens, self._token_indexers))
+            # fields["anchors"] = ListField(anchors)
+            # positives: List[Field] = []
+            # for text in positive_text:
+            #     tokens = self._tokenizer.tokenize(text)
+            #     positives.append(TextField(tokens, self._token_indexers))
+            # fields["positives"] = ListField(positives)
+            # fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)  
+            anchor_text = sample_anchor_positive_pairs(
                 text=text,
                 num_anchors=self._num_anchors,
                 num_positives=self._num_positives,
@@ -224,16 +252,13 @@ class DeCLUTRDatasetReader(DatasetReader):
             for text in anchor_text:
                 tokens = self._tokenizer.tokenize(text)
                 anchors.append(TextField(tokens, self._token_indexers))
+            print("number of token is", len(tokens))
             fields["anchors"] = ListField(anchors)
-            positives: List[Field] = []
-            for text in positive_text:
-                tokens = self._tokenizer.tokenize(text)
-                positives.append(TextField(tokens, self._token_indexers))
-            fields["positives"] = ListField(positives)
-            fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)
+            fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)            
         else:
             # print("no sampling")
             tokens = self._tokenizer.tokenize(text)
+            print("number of token is", len(tokens))
             fields["anchors"] = TextField(tokens, self._token_indexers)
             fields["difficulty"] = LabelField(difficulty_step, skip_indexing=True)
         return Instance(fields)

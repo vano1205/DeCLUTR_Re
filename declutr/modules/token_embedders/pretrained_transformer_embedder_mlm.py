@@ -11,6 +11,7 @@ from declutr.modules.transformer_encoder.bertencoder import BertEncoder, BertLay
 import numpy as np
 import logging
 import random
+# import cupy
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -72,6 +73,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         tokenizer_kwargs: Optional[Dict[str, Any]] = None,
         transformer_kwargs: Optional[Dict[str, Any]] = None,
         masked_language_modeling: bool = True,
+        load_directory: Optional[str] = None
     ) -> None:
         TokenEmbedder.__init__(self)  # Call the base class constructor
         tokenizer = PretrainedTransformerTokenizer(model_name, tokenizer_kwargs=tokenizer_kwargs)
@@ -88,6 +90,16 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
             # self.transformer_model = RobertaForAugment.from_pretrained()
                 model_name, config=self.config, **(transformer_kwargs or {})
             )
+
+            if load_directory is not None:
+                print("Loading Model from:", load_directory)
+                state = torch.load(load_directory)
+                model_dict = self.transformer_model.state_dict()
+                # ckpt__dict = state['state_dict']
+                state = {k: v for k, v in state.items() if k in model_dict}
+                model_dict.update(state) 
+                self.transformer_model.load_state_dict(model_dict, strict=False)
+                print("Loading Model from:", load_directory, "...Finished.")
         # Eveything after the if statement (including the else) is copied directly from:
         # https://github.com/allenai/allennlp/blob/master/allennlp/modules/token_embedders/pretrained_transformer_embedder.py
         else:
@@ -104,6 +116,8 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         if sub_module:
             assert hasattr(self.transformer_model, sub_module)
             self.transformer_model = getattr(self.transformer_model, sub_module)
+
+        # print("max_length", max_length)
         self._max_length = max_length
 
         # I'm not sure if this works for all models; open an issue on github if you find a case
@@ -176,6 +190,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
                 assert token_ids.shape == type_ids.shape
 
         fold_long_sequences = self._max_length is not None and token_ids.size(1) > self._max_length
+        # print("toekn_ids.size(1)",token_ids.size(1))
         if fold_long_sequences:
             batch_size, num_segment_concat_wordpieces = token_ids.size()
             token_ids, segment_concat_mask, type_ids = self._fold_long_sequences(
@@ -237,6 +252,7 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
 
             if augment == 0:
                 input_lens = torch.sum(masks, dim=1)
+                # print("augment value 0 expected")
                 input_embeds, extended_attention_mask = self.cutoff(embeds, input_lens, device, masks, difficulty_step)
 
                 encoder_outputs = self.encoder(
@@ -358,12 +374,15 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
         # embeds shape -> 4 * 256 * 768
         # print("difficulty step of cutoff is", difficulty_step)
         # print("embes.shape~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~", embeds.shape)
-        # difficulty_step = random.randint(1,difficulty_step)
+        # difficulty_step = random.randint(1,10)
+        # difficulty_step = np.random.beta(4,1) * 10
         for i in range(embeds.shape[0]):
             if difficulty_step > 10:
                 difficulty_step = 10
             #  args.aug_cutoff_ratio need to be defined (0.1)
-            ratio = 0.02 * difficulty_step
+            ratio = 0.01 * difficulty_step
+            # ratio = 0.01 + ((0.1 * difficulty_step) / 497840)
+            # ratio = 0.1
             print("ratio is ", ratio)
             cutoff_length = int(input_lens[i] * ratio)
             start = int(torch.rand(1).to(device)* (input_lens[i] - cutoff_length))
@@ -396,7 +415,8 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
     ) -> torch.Tensor:
         input_hidden_states = []
         # print("pcajitter enter!",difficulty_step)
-        # difficulty_step = random.randint(1,difficulty_step)
+        # difficulty_step = random.randint(1,10)
+        # difficulty_step = np.random.beta(4,1) * 10
         for i in range(hidden_states.shape[0]):
             inner_hidden = hidden_states[i]
             layer_matrix = inner_hidden / torch.norm(inner_hidden)
@@ -439,9 +459,12 @@ class PretrainedTransformerEmbedderMLM(PretrainedTransformerEmbedder):
 
             if difficulty_step > 10:
                 difficulty_step = 10
-            print("difficulty step of pca is", 0.005 * difficulty_step)
-            alpha = np.random.normal(0, 0.005 * difficulty_step)
-            # print("alpha val is ", alpha)
+            # ratio = 0.01 + ((0.1 * difficulty_step) / 497840)
+            # print("ratio of pca is", ratio)
+            # alpha = np.random.normal(0, ratio)
+            alpha = np.random.normal(0, 0.01 * difficulty_step)
+            # alpha = np.random.normal(0, 0.01 * difficulty_step)
+            print("alpha val is ", alpha)
             m2[:,0] = alpha * torch.from_numpy(eig_vals)
             # alpha = torch.normal(0,0.01, size=(1,1)).to(device=device)
             # print("alpha shape", alpha.shape)

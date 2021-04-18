@@ -65,7 +65,7 @@ def main(
     no effect if `min-length is None`.
     """
     print("path direct")
-    openwebtext_path = "openwebtext 2"
+    openwebtext_path = "openwebtext"
     openwebtext_path = Path(openwebtext_path)
     # openwebtext_path = 'https://drive.google.com/file/d/1EA5V0oetDCOke7afsktL_JDQ-ETtNOvx/view?usp=sharing'
 
@@ -147,7 +147,7 @@ def main(
 
                 # Retain documents if # of tokens is greater than the minimum specified length
                 if tokenizer is not None:
-                    num_tokens = len(tokenizer(text, truncation = True))
+                    num_tokens = len(tokenizer(text))
                     if num_tokens < min_length:
                         continue
 

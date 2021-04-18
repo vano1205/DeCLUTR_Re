@@ -22,7 +22,7 @@ def main(archive_file: str, save_directory: str) -> None:
     common_util.import_module_and_submodules("declutr")
     # cuda_device -1 places the model onto the CPU before saving. This avoids issues with
     # distributed models.
-    overrides = "{'trainer.cuda_device': -1}"
+    overrides = "{\"trainer.cuda_device\": -1, \"model.text_field_embedder.token_embedders.tokens.load_directory\": \"None\"}"
     archive = load_archive(archive_file, overrides=overrides)
     predictor = Predictor.from_archive(archive, predictor_name="declutr")
 
